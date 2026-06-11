@@ -21,6 +21,7 @@ The app is production/API-only: it does not render demo or mock weather data. Al
 
 ```text
 .
+|-- index.html             # Root fallback that opens the app
 |-- weather-tracker.html   # Complete standalone frontend
 |-- api/
 |   |-- weather.js         # OpenWeather current + forecast API route
