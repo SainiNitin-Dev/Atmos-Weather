@@ -1504,12 +1504,26 @@
         return cityAliases[clean.toLowerCase()] || clean;
       }
 
-      function inferTheme(condition, date = new Date()) {
+      function localWeatherHour(date = new Date(), timezoneOffset = null) {
+        const timestamp = new Date(date).getTime();
+        if (Number.isFinite(Number(timezoneOffset))) {
+          return new Date(timestamp + Number(timezoneOffset) * 1000).getUTCHours();
+        }
+        return new Date(date).getHours();
+      }
+
+      function inferTheme(condition, date = new Date(), cloudCover = null, timezoneOffset = null) {
         const value = String(condition || "").toLowerCase();
-        const hour = date.getHours();
+        const hour = localWeatherHour(date, timezoneOffset);
+        const cloudAmount = cloudCover == null ? null : Number(cloudCover);
+        const isNight = hour >= 19 || hour <= 5;
         if (value.includes("rain") || value.includes("drizzle") || value.includes("thunder")) return "rain";
-        if (value.includes("cloud") || value.includes("mist") || value.includes("fog")) return "cloudy";
-        if (hour >= 19 || hour <= 5) return "night";
+        if (value.includes("mist") || value.includes("fog") || value.includes("haze") || value.includes("smoke")) return "cloudy";
+        if (isNight && (!value.includes("cloud") || value.includes("few clouds") || (cloudAmount != null && cloudAmount <= 35))) return "night";
+        if (value.includes("clear") || value.includes("sun")) return isNight ? "night" : "sunny";
+        if (value.includes("few clouds") || value.includes("scattered clouds") || (cloudAmount != null && cloudAmount <= 40)) return isNight ? "night" : "sunny";
+        if (value.includes("cloud") || (cloudAmount != null && cloudAmount > 40)) return "cloudy";
+        if (isNight) return "night";
         return "sunny";
       }
 
@@ -1646,8 +1660,8 @@
         requestAnimationFrame(tick);
       }
 
-      function iconSVG(condition) {
-        const theme = inferTheme(condition);
+      function iconSVG(condition, cloudCover = null) {
+        const theme = inferTheme(condition, new Date(), cloudCover);
         if (theme === "rain") {
           return `
             <svg class="weather-icon" viewBox="0 0 48 48" aria-hidden="true">
@@ -1831,7 +1845,7 @@
           .map((hour, index) => `
             <button class="hour-pill ${index === state.activeHour ? "active" : ""}" data-hour="${index}" type="button">
               <div class="hour-time">${index === 0 ? "Now" : formatHour(hour.time)}</div>
-              ${iconSVG(hour.condition)}
+              ${iconSVG(`${hour.condition || ""} ${hour.description || ""}`, hour.cloudCover)}
               <div class="hour-temp">${temp(hour.temp)}</div>
               <div class="hour-rain">${hour.rainChance}% rain</div>
             </button>
@@ -1846,7 +1860,7 @@
             <div class="forecast-item ${index === state.expandedDay ? "open" : ""}" data-day="${index}">
               <button class="forecast-row glass" type="button">
                 <span class="forecast-day">${index === 0 ? "Today" : formatDay(day.date)}</span>
-                ${iconSVG(day.condition)}
+                ${iconSVG(day.condition, day.cloudCover)}
                 <span class="forecast-rain">${day.rainChance}%</span>
                 <span class="forecast-temps">${temp(day.max)} <span>${temp(day.min)}</span></span>
               </button>
@@ -1983,7 +1997,8 @@
           renderUnavailable(state.city, "Live OpenWeather data is required.");
           return;
         }
-        const theme = inferTheme(state.weather.current.condition, state.weather.updatedAt);
+        const current = state.weather.current;
+        const theme = inferTheme(`${current.condition || ""} ${current.description || ""}`, state.weather.updatedAt, current.cloudCover, state.weather.timezoneOffset);
         applyTheme(theme);
         els.searchInput.value = state.weather.city;
         renderHero(previousTemp);
